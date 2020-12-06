@@ -156,7 +156,7 @@ async function findIngredients(name, pages) {
         promises.push(findIngredientsPage(name, i));
     }
 
-    return Promise.all(promises.map((p) => p()));
+    return Promise.all(promises.map((p) => p())).then(flatten);
 }
 
 function findIngredientsPage(name, pageNo) {
@@ -226,7 +226,7 @@ function filterEntries(entries) {
 }
 
 findIngredients("pomidor", 8).then((e) => {
-    console.log(flatten(e));
+    console.log(e);
 });
 
 // const name = "cytryna";
