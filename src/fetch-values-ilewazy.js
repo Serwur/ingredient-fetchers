@@ -3,6 +3,16 @@ const fetch = module.require("node-fetch");
 const dom = module.require("xmldom").DOMParser;
 
 const PAGE_URL = "http://www.ilewazy.pl";
+const BAD_NAMES = [
+    "szklanka",
+    "lyzka",
+    "porcja",
+    "plasterek",
+    "plaster",
+    "garsc",
+    "lyzeczka",
+    "kawałek"
+];
 
 const htmlToSqlTranslation = new Map();
 htmlToSqlTranslation.set("Energia", "kcal");
@@ -122,7 +132,9 @@ function createEntries(nodes) {
  * @param {String} name
  */
 async function getNutritionalValues(name) {
-    return fetch(`${PAGE_URL}/${name}`)
+    const request = `${PAGE_URL}/${name}`;
+    console.log("Sending request: ", request);
+    return fetch(encodeURI(request))
         .then((res) => res.text())
         .then((parsedHTML) => {
             const nodes = findElements(parsedHTML);
@@ -158,8 +170,12 @@ async function findIngredients(name, pages) {
 }
 
 function findIngredientsPage(name, pageNo) {
-    return async () =>
-        fetch(`${PAGE_URL}/produkty/page/${pageNo}/q/${name}`)
+    return async () => {
+        const request = `${PAGE_URL}/produkty/page/${pageNo}/q/${name}`;
+
+        console.log("Sending request: ", request);
+
+        return fetch(encodeURI(request))
             .then((res) => res.text())
             .then((parsedHTML) => {
                 const results = getResults(parsedHTML);
@@ -167,6 +183,7 @@ function findIngredientsPage(name, pageNo) {
                 return links;
             })
             .catch(console.error);
+    };
 }
 
 function getResults(parsedHTML) {
@@ -247,6 +264,25 @@ async function createEntriesFromQueryingName(name, pages) {
     });
 }
 
+String.prototype.firstUpperRestLower = function () {
+    if (this.length === 0) return "";
+    if (this.length === 1) return this.toUpperCase();
+    return this[0].toUpperCase() + this.substr(1);
+};
+
+/**
+ * @param {String} name
+ */
+function convertName(name) {
+    return BAD_NAMES.reduce(
+        (currentName, badName) => currentName.replace(badName, ""),
+        name
+    )
+        .replace(/-/g, " ")
+        .trim()
+        .firstUpperRestLower();
+}
+
 if (process.argv < 4)
     throw new Error(
         "This file require two parameters. First - name of queried ingredient, Second - number of pages"
@@ -264,7 +300,7 @@ createEntriesFromQueryingName(ingredientName, numberOfPages)
     .then((ingredients) => {
         console.time("Creating queries duration");
         const queries = ingredients.map((ingr) =>
-            createQuery(ingr.name, ingr.values)
+            createQuery(convertName(ingr.name), ingr.values)
         );
         console.timeEnd("Creating queries duration");
         return queries;
