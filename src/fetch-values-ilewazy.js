@@ -1,6 +1,6 @@
-import $x from "xpath";
-import fetch from "node-fetch";
-import { DOMParser as dom } from "xmldom";
+const $x = module.require("xpath");
+const fetch = module.require("node-fetch");
+const dom = module.require("xmldom").DOMParser;
 
 const PAGE_URL = "http://www.ilewazy.pl";
 
@@ -16,7 +16,7 @@ htmlToSqlTranslation.set("Białko", "protein");
  * @param {String} value
  * @returns {Number}
  */
-export function toNumber(value) {
+function toNumber(value) {
     const _value = value.trim();
     let number = "";
 
@@ -50,7 +50,7 @@ function convertToNumberable(char) {
  * @param {String} char
  * @returns {Boolean}
  */
-export function isNumber(char) {
+function isNumber(char) {
     return !isNaN(Number(char));
 }
 
@@ -58,12 +58,12 @@ export function isNumber(char) {
  * @param {String} char
  * @returns {Boolean}
  */
-export function isDecimalSeparator(char) {
+function isDecimalSeparator(char) {
     return char === "," || char === ".";
 }
 
 function toDOM(html) {
-    return new dom().parseFromString(html);
+    return new dom({ errorHandler: function () {} }).parseFromString(html);
 }
 
 function findNames(doc) {
@@ -122,7 +122,7 @@ function createEntries(nodes) {
  * @param {String} name
  */
 async function getNutritionalValues(name) {
-    let result = fetch(`${PAGE_URL}/${name}`)
+    return fetch(`${PAGE_URL}/${name}`)
         .then((res) => res.text())
         .then((parsedHTML) => {
             const nodes = findElements(parsedHTML);
@@ -130,8 +130,6 @@ async function getNutritionalValues(name) {
             return entries;
         })
         .catch(console.error);
-
-    return result;
 }
 
 function pluckJoin(elements, key) {
@@ -152,7 +150,7 @@ function createQuery(name, elements) {
 async function findIngredients(name, pages) {
     const promises = [];
     pages = pages ? pages : 3;
-    for (let i = 1; i <= 12; i++) {
+    for (let i = 1; i <= pages; i++) {
         promises.push(findIngredientsPage(name, i));
     }
 
@@ -166,7 +164,6 @@ function findIngredientsPage(name, pageNo) {
             .then((parsedHTML) => {
                 const results = getResults(parsedHTML);
                 const links = getIngredientLinks(results);
-                console.log(links);
                 return links;
             })
             .catch(console.error);
@@ -225,12 +222,55 @@ function filterEntries(entries) {
         });
 }
 
-findIngredients("pomidor", 8).then((e) => {
-    console.log(e);
-});
+async function createEntriesFromQueryingName(name, pages) {
+    let names = [];
+    let ntrValuesPromises = [];
 
-// const name = "cytryna";
+    console.time("Page fetching duration");
+    await findIngredients(name, pages).then((ingredientNames) => {
+        console.timeEnd("Page fetching duration");
+        names = ingredientNames;
+        ntrValuesPromises = ingredientNames.map(getNutritionalValues);
+    });
 
-// getNutritionalValues(name).then((entries) => {
-//     const filteredEntries = filterEntries(entries);
-// });
+    console.time("Fetching nutritional values duration");
+    return Promise.all(ntrValuesPromises).then((values) => {
+        console.timeEnd("Fetching nutritional values duration");
+        const ingredients = [];
+        for (let i = 0; i < values.length; i++) {
+            ingredients.push({
+                name: names[i],
+                values: filterEntries(values[i]),
+            });
+        }
+        return ingredients;
+    });
+}
+
+if (process.argv < 4)
+    throw new Error(
+        "This file require two parameters. First - name of queried ingredient, Second - number of pages"
+    );
+
+const ingredientName = process.argv[2];
+const numberOfPages = process.argv[3];
+
+if (!isNumber(numberOfPages))
+    throw new Error("Second argument must be a number");
+if (numberOfPages <= 0)
+    throw new Error("Second argument cannot be less or equal to 0");
+
+createEntriesFromQueryingName(ingredientName, numberOfPages)
+    .then((ingredients) => {
+        console.time("Creating queries duration");
+        const queries = ingredients.map((ingr) =>
+            createQuery(ingr.name, ingr.values)
+        );
+        console.timeEnd("Creating queries duration");
+        return queries;
+    })
+    .then((ingredients) => {
+        for (let i = 0; i < ingredients.length; i++) {
+            console.log(ingredients[i]);
+        }
+    });
