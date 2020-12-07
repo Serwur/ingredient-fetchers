@@ -1,16 +1,18 @@
 {
-  "name": "ingredient-data-fetcher",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "node-fetch": "^2.6.1",
-    "xmldom": "^0.4.0",
-    "xpath": "0.0.32"
-  }
+    "name": "ingredient-data-fetcher",
+    "version": "1.0.0",
+    "description": "Simple scripts created to easily fetch some data from pages where nutritional values of ingredients can be found",
+    "main": "src/main.js",
+    "scripts": {
+        "start": "node src/main.js",
+        "help": "node src/main.js --help"
+    },
+    "author": "Marcin Zborowski",
+    "license": "ISC",
+    "dependencies": {
+        "node-fetch": "^2.6.1",
+        "xmldom": "^0.4.0",
+        "xpath": "0.0.32",
+        "yargs": "^16.2.0"
+    }
 }

@@ -253,21 +253,16 @@ function printEach(array) {
     for (let i = 0; i < array.length; i++) console.log(array[i]);
 }
 
-if (process.argv < 4)
-    throw new Error(
-        "This file require two parameters. First - name of queried ingredient, Second - number of pages"
-    );
+function printHelp() {
+    console.log(``);
+}
 
-const ingredientName = process.argv[2];
-const numberOfPages = process.argv[3];
+function createQueries(ingredientName, numberOfPages) {
+    createEntriesFromQueryingName(ingredientName, numberOfPages)
+        .then(convertEntriesNames)
+        .then(filterUnique)
+        .then(createQueriesFromEntries)
+        .then(printEach);
+}
 
-if (!isNumber(numberOfPages))
-    throw new Error("Second argument must be a number");
-if (numberOfPages <= 0)
-    throw new Error("Second argument cannot be less or equal to 0");
-
-createEntriesFromQueryingName(ingredientName, numberOfPages)
-    .then(convertEntriesNames)
-    .then(filterUnique)
-    .then(createQueriesFromEntries)
-    .then(printEach);
+module.exports.createQueries = createQueries;
