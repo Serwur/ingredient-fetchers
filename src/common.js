@@ -1,21 +1,18 @@
+const dom = module.require("xmldom").DOMParser;
+const $x = module.require("xpath");
+
 /**
  * @param {String} value
  * @returns {Number}
  */
-export function toNumber(value) {
+function toNumber(value) {
     const _value = value.trim();
     let number = "";
 
     for (var i = 0; i < _value.length; i++) {
-        const char = _value[i];
-
-        if (isNumber(char)) {
-            number += char;
-        } else if (isDecimalSeparator(char)) {
-            number += ".";
-        } else {
-            break;
-        }
+        const char = convertToNumberable(_value[i]);
+        if (char === null) break;
+        number += char;
     }
 
     number = Number(number);
@@ -32,20 +29,30 @@ export function toNumber(value) {
     }
 }
 
-/**
- * @param {String} char
- * @returns {Boolean}
- */
-export function isNumber(char) {
-    return Boolean(Number(char));
+function convertToNumberable(char) {
+    if (isNumber(char)) return char;
+    if (isDecimalSeparator(char)) return ".";
+    return null;
 }
 
 /**
  * @param {String} char
  * @returns {Boolean}
  */
-export function isDecimalSeparator(char) {
+function isNumber(char) {
+    return !isNaN(Number(char));
+}
+
+/**
+ * @param {String} char
+ * @returns {Boolean}
+ */
+function isDecimalSeparator(char) {
     return char === "," || char === ".";
+}
+
+function toDOM(html) {
+    return new dom({ errorHandler: function () {} }).parseFromString(html);
 }
 
 /**
@@ -53,13 +60,38 @@ export function isDecimalSeparator(char) {
  * @param {String} key
  * @returns {String}
  */
-export function pluckJoin(elements, key) {
+function pluckJoin(elements, key) {
     return elements.map(pluck(key)).join(", ");
 }
 
 /**
  * @param {String} key
  */
-export function pluck(key) {
+function pluck(key) {
     return (obj) => obj[key];
 }
+
+function find(xquery, doc) {
+    return $x.evaluate(xquery, doc, null, $x.XPathResult.ANY_TYPE, null);
+}
+
+function flatten(array) {
+    var flattend = [];
+    !(function flat(array) {
+        array.forEach(function (el) {
+            if (Array.isArray(el)) flat(el);
+            else flattend.push(el);
+        });
+    })(array);
+    return flattend;
+}
+
+module.exports.toNumber = toNumber;
+module.exports.convertToNumberable = convertToNumberable;
+module.exports.isNumber = isNumber;
+module.exports.isDecimalSeparator = isDecimalSeparator;
+module.exports.toDOM = toDOM;
+module.exports.pluckJoin = pluckJoin;
+module.exports.pluck = pluck;
+module.exports.find = find;
+module.exports.flatten = flatten;

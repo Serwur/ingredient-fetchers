@@ -1,6 +1,13 @@
-const $x = module.require("xpath");
+const {
+    toDOM,
+    find,
+    flatten,
+    toNumber,
+    isNumber,
+    pluckJoin,
+} = require("./common");
+
 const fetch = module.require("node-fetch");
-const dom = module.require("xmldom").DOMParser;
 
 const PAGE_URL = "http://www.ilewazy.pl";
 const BAD_NAMES = [
@@ -11,7 +18,7 @@ const BAD_NAMES = [
     "plaster",
     "garsc",
     "lyzeczka",
-    "kawałek"
+    "kawalek",
 ];
 
 const htmlToSqlTranslation = new Map();
@@ -22,58 +29,11 @@ htmlToSqlTranslation.set("Węglowodany", "carbohydrate");
 htmlToSqlTranslation.set("Błonnik", "roughage");
 htmlToSqlTranslation.set("Białko", "protein");
 
-/**
- * @param {String} value
- * @returns {Number}
- */
-function toNumber(value) {
-    const _value = value.trim();
-    let number = "";
-
-    for (var i = 0; i < _value.length; i++) {
-        const char = convertToNumberable(_value[i]);
-        if (char === null) break;
-        number += char;
+class Entry {
+    constructor(columnName, value) {
+        this.columnName = columnName.trim();
+        this.value = toNumber(value.trim());
     }
-
-    number = Number(number);
-
-    let unit = _value.substr(i).trim();
-
-    switch (unit) {
-        case "g":
-            return number;
-        case "mg":
-            return number / 1000;
-        default:
-            return number;
-    }
-}
-
-function convertToNumberable(char) {
-    if (isNumber(char)) return char;
-    if (isDecimalSeparator(char)) return ".";
-    return null;
-}
-
-/**
- * @param {String} char
- * @returns {Boolean}
- */
-function isNumber(char) {
-    return !isNaN(Number(char));
-}
-
-/**
- * @param {String} char
- * @returns {Boolean}
- */
-function isDecimalSeparator(char) {
-    return char === "," || char === ".";
-}
-
-function toDOM(html) {
-    return new dom({ errorHandler: function () {} }).parseFromString(html);
 }
 
 function findNames(doc) {
@@ -82,10 +42,6 @@ function findNames(doc) {
 
 function findValues(doc) {
     return find("//table[@id='ilewazy-ingedients']//tbody//tr//td[2]", doc);
-}
-
-function find(xquery, doc) {
-    return $x.evaluate(xquery, doc, null, $x.XPathResult.ANY_TYPE, null);
 }
 
 function createEntry(columnName, value) {
@@ -144,19 +100,11 @@ async function getNutritionalValues(name) {
         .catch(console.error);
 }
 
-function pluckJoin(elements, key) {
-    return elements.map(pluck(key)).join(", ");
-}
-
-function pluck(key) {
-    return (obj) => obj[key];
-}
-
-function createQuery(name, elements) {
+function createQuery(entry) {
     return `insert into ingredient (name, ${pluckJoin(
-        elements,
+        entry.values,
         "columnName"
-    )}) values('${name}', ${pluckJoin(elements, "value")});`;
+    )}) values('${entry.name}', ${pluckJoin(entry.values, "value")});`;
 }
 
 async function findIngredients(name, pages) {
@@ -206,28 +154,6 @@ function getIngredientLinks(results) {
     return links;
 }
 
-/**
- * @param {XPathResult} nodes
- */
-function printNodes(nodes) {
-    let node = nodes.iterateNext();
-    while (node) {
-        console.log(node.attributes[0].value);
-        node = nodes.iterateNext();
-    }
-}
-
-function flatten(array) {
-    var flattend = [];
-    !(function flat(array) {
-        array.forEach(function (el) {
-            if (Array.isArray(el)) flat(el);
-            else flattend.push(el);
-        });
-    })(array);
-    return flattend;
-}
-
 function filterEntries(entries) {
     return entries
         .filter((e) => htmlToSqlTranslation.has(e.columnName))
@@ -253,13 +179,16 @@ async function createEntriesFromQueryingName(name, pages) {
     console.time("Fetching nutritional values duration");
     return Promise.all(ntrValuesPromises).then((values) => {
         console.timeEnd("Fetching nutritional values duration");
+
         const ingredients = [];
+
         for (let i = 0; i < values.length; i++) {
             ingredients.push({
                 name: names[i],
                 values: filterEntries(values[i]),
             });
         }
+
         return ingredients;
     });
 }
@@ -283,6 +212,47 @@ function convertName(name) {
         .firstUpperRestLower();
 }
 
+/**
+ *
+ * @param {[]} entries
+ */
+function convertEntriesNames(entries) {
+    return entries.map((entry) => {
+        return {
+            name: convertName(entry.name),
+            values: entry.values,
+        };
+    });
+}
+
+function filterUnique(entriesToFilter) {
+    const uniqueEntries = new Set();
+    const entries = [];
+
+    entriesToFilter.forEach((entry) => {
+        if (!uniqueEntries.has(entry.name)) {
+            uniqueEntries.add(entry.name);
+            entries.push(entry);
+        }
+    });
+
+    return entries;
+}
+
+/**
+ * @param {[]} entries
+ */
+function createQueriesFromEntries(entries) {
+    return entries.map((entry) => createQuery(entry));
+}
+
+/**
+ * @param {[]} array
+ */
+function printEach(array) {
+    for (let i = 0; i < array.length; i++) console.log(array[i]);
+}
+
 if (process.argv < 4)
     throw new Error(
         "This file require two parameters. First - name of queried ingredient, Second - number of pages"
@@ -297,16 +267,7 @@ if (numberOfPages <= 0)
     throw new Error("Second argument cannot be less or equal to 0");
 
 createEntriesFromQueryingName(ingredientName, numberOfPages)
-    .then((ingredients) => {
-        console.time("Creating queries duration");
-        const queries = ingredients.map((ingr) =>
-            createQuery(convertName(ingr.name), ingr.values)
-        );
-        console.timeEnd("Creating queries duration");
-        return queries;
-    })
-    .then((ingredients) => {
-        for (let i = 0; i < ingredients.length; i++) {
-            console.log(ingredients[i]);
-        }
-    });
+    .then(convertEntriesNames)
+    .then(filterUnique)
+    .then(createQueriesFromEntries)
+    .then(printEach);
